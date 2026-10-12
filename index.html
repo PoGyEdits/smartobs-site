@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Obs: Smart observing for CS2</title>
+<meta name="description" content="Smart Obs helps Counter-Strike 2 observers pick the shot. Smart Observer suggests the campath that fits the round and checks it can really see the action, a smooth camera puts cinematics on two mouse buttons, and the free MCR Pack ships 215 campaths across 9 maps. Free during early access.">
+<meta property="og:title" content="Smart Obs: Smart observing for CS2">
+<meta property="og:description" content="Smart Observer picks the shot, the smooth camera does the cinematics, and the free MCR Pack ships 215 campaths. Free during early access.">
+<meta property="og:image" content="assets/img/hero-poster.jpg">
+<meta property="og:type" content="website">
+<link rel="icon" href="assets/img/favicon.png">
+<link rel="stylesheet" href="css/site.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <a class="nav-brand" href="#top">
+    <img class="logo-mark" src="assets/img/logo.png" srcset="assets/img/logo.png 1x, assets/img/logo@2x.png 2x" alt="" width="34" height="34">
+    <span class="nav-word">
+      <strong>SMART OBS</strong>
+      <small>OBSERVER SUITE</small>
+    </span>
+  </a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="#observe">The idea</a>
+    <a href="#smart">Smart Observer</a>
+    <a href="#app">The app</a>
+    <a href="#download">Download</a>
+    <a href="#thanks">Thanks</a>
+  </nav>
+  <a class="btn btn-sm" href="#download">Download free</a>
+</header>
+
+<!-- ================= AGENT ================= -->
+<aside class="agent" id="agent" aria-hidden="true">
+  <div class="agent-stage">
+    <canvas id="agent-canvas"></canvas>
+  </div>
+</aside>
+
+<main id="main">
+
+<!-- ================= HERO ================= -->
+<section class="hero" id="top" data-agent-yaw="0.25">
+  <video class="hero-video" autoplay muted loop playsinline preload="metadata"
+         poster="assets/img/hero-poster.jpg">
+    <source src="assets/video/hero.mp4" type="video/mp4">
+  </video>
+  <div class="hero-scrim"></div>
+  <div class="hero-inner">
+    <h1 class="hero-title">Smart Obs</h1>
+    <p class="hero-sub">
+      Smart observing for Counter-Strike 2. It suggests the campath that fits the moment,
+      checks that the shot can really see the action, and puts cinematic camera work on a
+      button, so you stay the one directing the game. Not a replacement for an observer,
+      a second pair of hands.
+    </p>
+    <div class="hero-cta">
+      <a class="btn btn-lg" href="#download">Download free for Windows</a>
+    </div>
+    <p class="hero-alt">
+      Free during early access. The MCR Pack of 215 campaths installs from inside the app.
+    </p>
+    <dl class="hero-stats">
+      <div><dt>215</dt><dd>free campaths in the app</dd></div>
+      <div><dt>9</dt><dd>competitive maps</dd></div>
+      <div><dt>1</dt><dd>key to fly any of them</dd></div>
+    </dl>
+  </div>
+  <a class="hero-scroll" href="#observe" aria-label="Scroll down"><span></span></a>
+</section>
+
+<!-- ================= OBSERVING ================= -->
+<section class="band" id="observe" data-agent-yaw="0.05">
+  <div class="wrap">
+    <p class="eyebrow">The idea</p>
+    <h2 class="h2">What am I trying to do?</h2>
+    <div class="note">
+      <p>
+        I am not trying to replace observers with AI. Quite the opposite: I want to help
+        observers get the best out of themselves, whether they are working alone without a
+        cinematic observer, or they simply prefer to do it themselves. Smart Obs should
+        help you combine both, and still let you be the one behind it.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SMART OBSERVER ================= -->
+<section class="band band-dark" id="smart" data-agent-yaw="-0.18">
+  <div class="wrap">
+    <p class="eyebrow">The centrepiece</p>
+    <h2 class="h2">Smart Observer helps you pick the shot.</h2>
+    <p class="lede">
+      It watches the round and suggests the campath that fits it, then waits. Press Play and it
+      flies, or ignore it and keep observing by hand. It also puts the camera work on hotkeys:
+      follow a grenade, lock onto a player, or take a smooth free camera for a cinematic.
+    </p>
+
+    <div class="pipeline">
+      <div class="stage">
+        <span class="stage-n">01</span>
+        <h3>It suggests</h3>
+        <p>
+          Reads the round and picks from the campaths you have loaded. Nothing moves until
+          you press Play.
+        </p>
+      </div>
+      <div class="stage">
+        <span class="stage-n">02</span>
+        <h3>It checks the shot</h3>
+        <p>
+          It knows each map's real walls and floors, so it only suggests a shot that can
+          actually see the player, not one that films the wall in front of them.
+        </p>
+      </div>
+      <div class="stage">
+        <span class="stage-n">03</span>
+        <h3>Smooth camera</h3>
+        <p>
+          One mouse button puts the camera behind the player, the other in front. Fly a
+          cinematic, then press again to land on the nearest player.
+        </p>
+      </div>
+      <div class="stage">
+        <span class="stage-n">04</span>
+        <h3>On a key</h3>
+        <p>
+          Play the suggestion on Num 7, lock onto a player on Num 8, follow a grenade on
+          Num 9, smooth camera on Mouse 4 and 5. All rebindable.
+        </p>
+      </div>
+    </div>
+
+    <figure class="feature-media">
+      <video autoplay muted loop playsinline preload="none" poster="assets/img/observer-poster.jpg">
+        <source src="assets/video/observer.mp4" type="video/mp4">
+      </video>
+      <figcaption>Holding a site while the round develops.</figcaption>
+    </figure>
+
+    <div class="cards">
+      <article class="card">
+        <h3>Follow Grenade</h3>
+        <video autoplay muted loop playsinline preload="none" poster="assets/img/grenade-poster.jpg">
+          <source src="assets/video/grenade.mp4" type="video/mp4">
+        </video>
+      </article>
+      <article class="card">
+        <h3>Player Camera</h3>
+        <video autoplay muted loop playsinline preload="none" poster="assets/img/tracking-poster.jpg">
+          <source src="assets/video/tracking.mp4" type="video/mp4">
+        </video>
+      </article>
+    </div>
+
+    <div class="card-row">
+      <article class="card card-sm">
+        <h3>Freezetime rotation</h3>
+        <p>Every round opens on a different authored position instead of the same stale angle.</p>
+      </article>
+      <article class="card card-sm">
+        <h3>Right shot, right time</h3>
+        <p>Round-start transitions only at the start of a round, site shots once the bomb is down.</p>
+      </article>
+      <article class="card card-sm">
+        <h3>Timeout campaths</h3>
+        <p>Pause paths are kept for real timeouts, so they never fire during live play.</p>
+      </article>
+      <article class="card card-sm">
+        <h3>Your colours</h3>
+        <p>Seven themes, from the classic red to dark and white, across every window.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ================= THE APP ================= -->
+<section class="band band-dark" id="app" data-agent-yaw="-0.5">
+  <div class="wrap">
+    <p class="eyebrow">The app</p>
+    <h2 class="h2">Everything in one window.</h2>
+    <p class="lede">
+      A dashboard for the live match, Smart Observer and the camera controls, your keybinds,
+      and the plumbing (HLAE, BoltObserv, configs) handled for you.
+    </p>
+
+    <div class="shots">
+      <div class="shot-tabs" role="tablist" aria-label="App screens">
+        <button role="tab" aria-selected="true"  data-shot="dashboard">Dashboard</button>
+        <button role="tab" aria-selected="false" data-shot="smart-observer">Smart Observer</button>
+        <button role="tab" aria-selected="false" data-shot="campath-library">Campath Library</button>
+        <button role="tab" aria-selected="false" data-shot="keybinds">Keybinds</button>
+        <button role="tab" aria-selected="false" data-shot="workspace">Workspace</button>
+        <button role="tab" aria-selected="false" data-shot="addons">Addons</button>
+        <button role="tab" aria-selected="false" data-shot="store">Store</button>
+        <button role="tab" aria-selected="false" data-shot="settings">Settings</button>
+      </div>
+      <div class="shot-frame">
+        <div class="shot-chrome"><span></span><span></span><span></span></div>
+        <img id="shot-img" src="assets/img/dashboard.jpg" width="1280" height="720"
+             alt="Smart Obs dashboard showing live match statistics">
+      </div>
+      <p class="shot-caption" id="shot-caption">Live process, map and netcon state, with an activity log of every action fired.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DOWNLOAD ================= -->
+<section class="band band-dark beta" id="download" data-agent-yaw="-0.98">
+  <div class="wrap">
+    <p class="eyebrow">Free early access</p>
+    <h2 class="h2 h2-xl">Get Smart Obs.</h2>
+    <div class="apply">
+      <div class="apply-copy">
+        <p class="lede">
+          Smart Obs is free during early access. Download it, create an account with your
+          email, and you are in. The MCR Pack, 215 campaths across nine maps, installs from the
+          app's Store in one click. Windows 10 or 11 and Counter-Strike 2 required; HLAE installs
+          from inside the app.
+        </p>
+        <div class="beta-strip">
+          <video autoplay muted loop playsinline preload="none" poster="assets/img/truck-poster.jpg">
+            <source src="assets/video/truck.mp4" type="video/mp4">
+          </video>
+          <video autoplay muted loop playsinline preload="none" poster="assets/img/interior-poster.jpg">
+            <source src="assets/video/interior.mp4" type="video/mp4">
+          </video>
+          <video autoplay muted loop playsinline preload="none" poster="assets/img/smoke-poster.jpg">
+            <source src="assets/video/smoke.mp4" type="video/mp4">
+          </video>
+        </div>
+      </div>
+      <div class="apply-form download-card">
+        <a class="btn btn-lg" id="download-btn" href="https://github.com/PoGyEdits/creators-releases/releases/latest/download/SmartObsSetup.exe">Download for Windows</a>
+        <p class="download-note">
+          One installer, about 25 MB. It updates itself when a new version is out.
+        </p>
+        <p class="download-note">
+          Like it? <a href="https://ko-fi.com/smartobs" target="_blank" rel="noopener">Support the development of Smart Obs on Ko-fi</a>.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= THANKS ================= -->
+<section class="band" id="thanks" data-agent-yaw="-0.7">
+  <div class="wrap">
+    <p class="eyebrow">Thank you</p>
+    <h2 class="h2">Standing on the shoulders of two great tools.</h2>
+    <p class="lede">
+      Smart Obs would not exist without the open-source work below. It installs and drives
+      them for you, but the credit for what they do belongs to their authors.
+    </p>
+    <div class="card-row thanks-row">
+      <article class="card card-sm">
+        <h3>HLAE</h3>
+        <p>
+          Half-Life Advanced Effects by advancedfx: the campaths, the camera control and the
+          scripting that every camera in Smart Obs is built on.
+        </p>
+        <p class="thanks-links">
+          <a href="https://www.advancedfx.org/" target="_blank" rel="noopener">advancedfx.org</a> &middot;
+          <a href="https://github.com/advancedfx/advancedfx" target="_blank" rel="noopener">GitHub</a>
+        </p>
+      </article>
+      <article class="card card-sm">
+        <h3>BoltObserv</h3>
+        <p>
+          The live radar and minimap by boltgolt, embedded in the Workspace so the whole map is
+          in view while you direct.
+        </p>
+        <p class="thanks-links">
+          <a href="https://github.com/boltgolt/boltobserv" target="_blank" rel="noopener">GitHub</a>
+        </p>
+      </article>
+    </div>
+    <p class="thanks-note">
+      If Smart Obs helps you, consider supporting these projects too. Neither is affiliated
+      with Smart Obs.
+    </p>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <div class="nav-brand">
+      <img class="logo-mark" src="assets/img/logo.png" srcset="assets/img/logo.png 1x, assets/img/logo@2x.png 2x" alt="" width="34" height="34">
+      <span class="nav-word"><strong>SMART OBS</strong><small>OBSERVER SUITE</small></span>
+    </div>
+    <p class="foot-note">
+      <a href="terms.html">Terms of use</a> &middot; <a href="privacy.html">Privacy policy</a> &middot;
+      <a href="#thanks">Thanks</a> &middot;
+      <a href="https://ko-fi.com/smartobs" target="_blank" rel="noopener">Ko-fi</a><br>
+      Built for Counter-Strike 2 observers. Not affiliated with Valve Corporation.<br>
+      Footage captured in-game. Store artwork &copy; PLAYZONE.
+    </p>
+  </div>
+</footer>
+
+<script src="js/site.js"></script>
+<script type="module" src="js/agent.js"></script>
+</body>
+</html>
