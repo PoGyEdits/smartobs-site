@@ -6,11 +6,12 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const MODEL = 'assets/model/agent.glb';
 
 // Extra turn so the exported model faces the viewer at yaw 0 (radians).
-const MODEL_YAW = -Math.PI / 2 + 0.75;
+const MODEL_YAW = -Math.PI / 2 + 0.55;
 
 // Framing. The model stands at full height; on the page we want a bust: head and torso filling the panel, legs out of shot.
 // showFrac is how much of the figure's total height stays visible, measured
@@ -21,20 +22,15 @@ const FRAME = {
   lift: 0.02        // nudge the framing down so the head is not dead centre
 };
 
-/* ---------- eyes ----------
-   CS2 draws the eyeballs with its own shader, which the glTF export loses, so
-   the whites are baked into the mask texture and the irises are drawn here, on
-   top, in the eye area given by eyemask.png. Drawing them live is what lets
-   them glance around, blink, and keep finding the viewer as he turns away.
-   The numbers come from the Blender scene: for each eye, the texture spot at
-   its centre and how texture space maps to metres across (x) and up (y). */
+/* CS2 projects its iris texture from each eye bone onto the head mesh.
+   Use the same bind-space projection and the game's eye mask so the iris
+   follows the curved eyeball, instead of a flat circle in the face UVs. */
 const EYES = {
-  box: new THREE.Vector4(0.583984, 0.652344, 0.244141, 0.188477),
-  eyes: [{ c: new THREE.Vector2(0.671092, 0.797346), a: new THREE.Vector4(0.158598, 0.009269, 0.002100, 0.149527) }, { c: new THREE.Vector2(0.742154, 0.691945), a: new THREE.Vector4(0.159647, -0.009104, -0.001705, 0.151008) }],
-  halfHeight: 0.005674,    // half the height of the eye opening, metres
-  irisR: 0.0050,     // iris radius, metres
-  glance: [0.0014, 0.0006],   // how far a glance moves the iris, metres
-  follow: 0.004,     // iris shift per radian he has turned away from the start
+  irisSize: 1.026 * 0.0254, // CS2 material parameter: inches to metres
+  pupilSize: 0.143,
+  saturation: 0.35,        // muted grey-green, matching the supplied reference
+  restGaze: [0, -0.002],   // relaxed, level gaze instead of staring above the viewer
+  glance: [0.00035, 0.00015]
 };
 
 const root = document.getElementById('agent');
@@ -73,26 +69,34 @@ function init() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 1.0;
 
   const scene = new THREE.Scene();
+  // Metals need reflected surroundings as well as direct lights. Without
+  // this the AK's receiver and magazine render as flat grey plastic.
+  const environment = new RoomEnvironment();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const environmentMap = pmrem.fromScene(environment, 0.04);
+  scene.environment = environmentMap.texture;
+  environment.dispose();
+  pmrem.dispose();
   const camera = new THREE.PerspectiveCamera(34, 3 / 4, 0.1, 100);
   camera.position.set(0, 0, 4);
 
   // Key light warm from the front-left, a red rim from behind-right to pick
   // out the silhouette against a dark page, and a soft fill so the shadow
   // side does not go to pure black.
-  scene.add(new THREE.HemisphereLight(0xbfc7d6, 0x1a1412, 1.1));
+  scene.add(new THREE.HemisphereLight(0xd8e0e8, 0x66513b, 1.2));
 
-  const key = new THREE.DirectionalLight(0xfff2e8, 2.6);
+  const key = new THREE.DirectionalLight(0xffefdb, 2.0);
   key.position.set(-2.4, 2.6, 3.2);
   scene.add(key);
 
-  const rim = new THREE.DirectionalLight(0xff3b2f, 3.4);
+  const rim = new THREE.DirectionalLight(0xff7668, 0.65);
   rim.position.set(2.8, 1.4, -2.6);
   scene.add(rim);
 
-  const fill = new THREE.DirectionalLight(0x6f7d99, 0.9);
+  const fill = new THREE.DirectionalLight(0xc3cdd9, 0.55);
   fill.position.set(2.2, -1.2, 2.0);
   scene.add(fill);
 
@@ -153,7 +157,10 @@ function init() {
     // Shift the view so the figure still stands centred on the panel.
     const bleed = Math.max(0, w - r.width);
     stageW = w; stageH = h;
-    centreNdc = bleed / w;
+    // Keep the body farther right, with a larger gap beside the copy.
+    // Express the offset in viewport pixels so it survives resizing.
+    const rightOffset = Math.min(window.innerWidth * 0.035, 84);
+    centreNdc = (bleed + 2 * rightOffset) / w;
     fitWidth();
     camera.updateProjectionMatrix();
     return r;
@@ -262,88 +269,77 @@ function init() {
     camera.setViewOffset(stageW, stageH, -sh * stageW / 2, 0, stageW, stageH);
   }
 
-  const eyeU = {
-    eyeMask: { value: null },
-    eyeBox: { value: EYES.box },
-    eyeC0: { value: EYES.eyes[0].c }, eyeA0: { value: EYES.eyes[0].a },
-    eyeC1: { value: EYES.eyes[1].c }, eyeA1: { value: EYES.eyes[1].a },
-    eyeGaze: { value: new THREE.Vector2() },
-    eyeBlink: { value: 0 },
-    eyeHz: { value: EYES.halfHeight },
-    irisR: { value: EYES.irisR }
-  };
-  new THREE.TextureLoader().load('assets/model/eyemask.png', (t) => { eyeU.eyeMask.value = t; });
+  const eyeGaze = { value: new THREE.Vector2() };
+  const textureLoader = new THREE.TextureLoader();
+  const eyeAlbedo = textureLoader.load('assets/model/eye-iris.webp');
+  eyeAlbedo.colorSpace = THREE.SRGBColorSpace;
+  // The source texture and mask use glTF's UV orientation.
+  eyeAlbedo.flipY = false;
+  const eyeMask = textureLoader.load('assets/model/eye-mask.webp');
+  eyeMask.flipY = false;
+  eyeMask.colorSpace = THREE.NoColorSpace;
 
-  function addEyes(mat) {
+  function addEyes(mesh) {
+    if (!mesh.isSkinnedMesh) return;
+    const bones = mesh.skeleton.bones;
+    const left = bones.findIndex(b => b.name === 'eyeball_l');
+    const right = bones.findIndex(b => b.name === 'eyeball_r');
+    if (left < 0 || right < 0) return;
+    const mat = mesh.material;
     mat.onBeforeCompile = (shader) => {
-      Object.assign(shader.uniforms, eyeU);
+      Object.assign(shader.uniforms, {
+        eyeInvL: { value: mesh.skeleton.boneInverses[left] },
+        eyeInvR: { value: mesh.skeleton.boneInverses[right] },
+        eyeAlbedo: { value: eyeAlbedo }, eyeMask: { value: eyeMask },
+        eyeSize: { value: EYES.irisSize },
+        eyePupil: { value: EYES.pupilSize },
+        eyeSaturation: { value: EYES.saturation }, eyeGaze
+      });
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>
+uniform mat4 eyeInvL; uniform mat4 eyeInvR;
+varying vec3 vEyeL; varying vec3 vEyeR;`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+vEyeL = (eyeInvL * bindMatrix * vec4(position, 1.0)).xyz;
+vEyeR = (eyeInvR * bindMatrix * vec4(position, 1.0)).xyz;`);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
-uniform sampler2D eyeMask; uniform vec4 eyeBox;
-uniform vec2 eyeC0; uniform vec4 eyeA0; uniform vec2 eyeC1; uniform vec4 eyeA1;
-uniform vec2 eyeGaze; uniform float eyeBlink; uniform float eyeHz; uniform float irisR;
-vec2 eyeLocal(vec2 uv, vec2 c, vec4 a) { vec2 q = uv - c; return vec2(a.x * q.x + a.y * q.y, a.z * q.x + a.w * q.y); }`)
+uniform sampler2D eyeAlbedo; uniform sampler2D eyeMask;
+uniform float eyeSize; uniform float eyePupil; uniform float eyeSaturation;
+uniform vec2 eyeGaze; varying vec3 vEyeL; varying vec3 vEyeR;`)
         .replace('#include <map_fragment>', `#include <map_fragment>
 {
-  vec2 uvb = vec2(vMapUv.x, 1.0 - vMapUv.y);
-  vec2 mUV = (uvb - eyeBox.xy) / eyeBox.zw;
-  if (mUV.x >= 0.0 && mUV.y >= 0.0 && mUV.x <= 1.0 && mUV.y <= 1.0) {
-    float m = texture2D(eyeMask, mUV).r;
-    if (m > 0.01) {
-      vec2 d0 = eyeLocal(uvb, eyeC0, eyeA0);
-      vec2 d1 = eyeLocal(uvb, eyeC1, eyeA1);
-      vec2 d = dot(d0, d0) < dot(d1, d1) ? d0 : d1;
-      vec2 p = d - eyeGaze;
-      float r = length(p) / irisR;
-      // grey-blue iris, darker toward its rim, black pupil
-      vec3 iris = vec3(0.075, 0.115, 0.15) * (1.0 + 0.35 * smoothstep(0.75, 0.3, r));
-      iris *= 1.0 - 0.6 * smoothstep(0.7, 1.0, r);
-      iris = mix(iris, vec3(0.008), smoothstep(0.40, 0.34, r));
-      // the baked whites read glaring under the page lights: warm them and pull them down
-      vec3 white = diffuseColor.rgb * vec3(0.72, 0.66, 0.60);
-      vec3 c = mix(white, iris, smoothstep(1.0, 0.92, r));
-      // a soft reflection of the key light, fixed in the eye
-      vec2 hp = d - vec2(-0.35, 0.35) * irisR;
-      c = mix(c, vec3(0.55), 0.8 * smoothstep(0.0011, 0.0005, length(hp)) * step(r, 1.0));
-      // upper lid shadow, and the lid itself coming down when he blinks
-      c *= 1.0 - 0.35 * smoothstep(-0.2, 1.0, d.y / eyeHz);
-      float lid = eyeHz * (1.15 - 2.3 * eyeBlink);
-      c = mix(c, vec3(0.20, 0.11, 0.07), smoothstep(lid - 0.0005, lid + 0.0005, d.y));
-      diffuseColor.rgb = mix(diffuseColor.rgb, c, m);
-    }
+  float mask = texture2D(eyeMask, vMapUv).r;
+  if (mask > 0.01) {
+    vec3 eye = length(vEyeL) < length(vEyeR) ? vEyeL : vEyeR;
+    vec2 d = (eye.yz - eyeGaze) / eyeSize;
+    vec4 iris = texture2D(eyeAlbedo, clamp(d + 0.5, 0.0, 1.0));
+    vec3 grey = vec3(dot(iris.rgb, vec3(0.2126, 0.7152, 0.0722)));
+    vec3 color = mix(grey, iris.rgb, eyeSaturation);
+    float pupil = 1.0 - smoothstep(eyePupil * 0.5 - 0.012, eyePupil * 0.5 + 0.012, length(d));
+    color = mix(color, vec3(0.004), pupil);
+    // Preserve the exported eyelid/sclera shading instead of painting over it.
+    color *= mix(vec3(1.0), clamp(diffuseColor.rgb * 2.0, 0.35, 1.0), 0.3);
+    diffuseColor.rgb = mix(diffuseColor.rgb, color, iris.a * mask * step(0.0, eye.x));
   }
 }`);
     };
+    mat.customProgramCacheKey = () => 'cs2-bone-projected-eyes-v1';
     mat.needsUpdate = true;
   }
 
-  // Glances: hold a spot for a second or few, then flick to a new one.
   const gazeNow = new THREE.Vector2(), gazeTo = new THREE.Vector2();
-  let glanceIn = 1.5, blinkIn = 2.5, blinkT = -1;
-  let startYaw = null;
+  let glanceIn = 3;
   function animateEyes(dt) {
-    if (startYaw === null && sections.length) startYaw = parseFloat(sections[0].dataset.agentYaw) || 0;
     if (!reduced) {
       glanceIn -= dt;
       if (glanceIn <= 0) {
-        // mostly back near the middle, now and then a little further off
-        const far = Math.random() < 0.35 ? 1 : 0.4;
-        gazeTo.set((Math.random() * 2 - 1) * EYES.glance[0] * far, (Math.random() * 2 - 1) * EYES.glance[1] * far);
-        glanceIn = 1.2 + Math.random() * 2.8;
+        gazeTo.set((Math.random() * 2 - 1) * EYES.glance[0], (Math.random() * 2 - 1) * EYES.glance[1]);
+        glanceIn = 3 + Math.random() * 3;
       }
-      blinkIn -= dt;
-      if (blinkIn <= 0 && blinkT < 0) { blinkT = 0; blinkIn = 2.5 + Math.random() * 4; }
     }
     gazeNow.lerp(gazeTo, 1 - Math.pow(0.0005, dt));
-    // As he turns away from the start, his eyes keep coming back to you.
-    const follow = THREE.MathUtils.clamp((currentYaw - (startYaw || 0)) * EYES.follow, -0.0024, 0.0024);
-    eyeU.eyeGaze.value.set(gazeNow.x + follow, gazeNow.y);
-    if (blinkT >= 0) {
-      blinkT += dt;
-      const k = blinkT / 0.16;
-      eyeU.eyeBlink.value = k >= 1 ? 0 : Math.sin(Math.PI * k);
-      if (k >= 1) blinkT = -1;
-    }
+    eyeGaze.value.set(gazeNow.x + EYES.restGaze[0], gazeNow.y + EYES.restGaze[1]);
   }
 
   /* ---------- load ---------- */
@@ -379,8 +375,8 @@ vec2 eyeLocal(vec2 uv, vec2 c, vec4 a) { vec2 q = uv - c; return vec2(a.x * q.x 
     model.traverse((o) => {
       if (o.isMesh || o.isSkinnedMesh) {
         o.frustumCulled = false;
-        if (o.material) o.material.envMapIntensity = 0.8;
-        if (o.material && /balaclava/i.test(o.material.name)) addEyes(o.material);
+        if (o.material) o.material.envMapIntensity = /ak47/i.test(o.material.name) ? 0.9 : 0.45;
+        if (o.material && /balaclava/i.test(o.material.name)) addEyes(o);
       }
     });
 
