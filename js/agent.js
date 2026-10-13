@@ -89,6 +89,8 @@ function init() {
   let currentYaw = 0;
   let loaded = false;
   let focusY = 0;
+  let heightDist = 4;   // camera distance that frames the bust vertically
+  let reach = null;     // sampled points of the figure, [x, z] pairs, for the width fit
 
   /* ---------- framing ----------
      Aim the camera at the upper body instead of the whole figure, so the
@@ -107,7 +109,8 @@ function init() {
     focusY = (top + bottom) / 2 - h * FRAME.lift;
 
     const vFov = THREE.MathUtils.degToRad(camera.fov);
-    camera.position.set(0, focusY, span / (2 * Math.tan(vFov / 2)));
+    heightDist = span / (2 * Math.tan(vFov / 2));
+    camera.position.set(0, focusY, heightDist);
     camera.lookAt(0, focusY, 0);
     camera.updateProjectionMatrix();
   }
@@ -121,8 +124,56 @@ function init() {
     const h = Math.max(1, Math.round(stage.height));
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
+    fitWidth();
     camera.updateProjectionMatrix();
     return r;
+  }
+
+  /* ---------- width fit ----------
+     The rifle reaches well past the shoulders, and at some section angles
+     the stock or the muzzle ran off the edge of the panel and was cut. Pull
+     the camera back far enough that the whole figure, rifle included, stays
+     inside the panel at every section angle. Measured once from the actual
+     skinned vertices, so it follows the pose, not a loose bounding box. */
+
+  // Share of the half-width the figure may use; the rest is breathing room
+  // for the idle sway.
+  const WIDTH_FILL = 0.92;
+
+  function measureReach() {
+    const pts = [];
+    const v = new THREE.Vector3();
+    const bottom = focusY - heightDist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    model.updateMatrixWorld(true);
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      const n = o.geometry.attributes.position.count;
+      for (let i = 0; i < n; i += 3) {
+        o.getVertexPosition(i, v);
+        v.applyMatrix4(o.matrixWorld);
+        // Only what can be on screen: the bust, not the legs out of shot.
+        if (v.y >= bottom) pts.push(v.x, v.z);
+      }
+    });
+    reach = pts;
+  }
+
+  function fitWidth() {
+    if (!reach) return;
+    const t = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect * WIDTH_FILL;
+    const yaws = sections.map((s) => parseFloat(s.dataset.agentYaw) || 0);
+    let need = heightDist;
+    for (const yaw of yaws) {
+      const c = Math.cos(yaw), sn = Math.sin(yaw);
+      for (let i = 0; i < reach.length; i += 2) {
+        const x = reach[i], z = reach[i + 1];
+        const xr = x * c + z * sn;
+        const zr = -x * sn + z * c;
+        const d = Math.abs(xr) / t + zr;
+        if (d > need) need = d;
+      }
+    }
+    camera.position.z = need;
   }
 
   /* ---------- load ---------- */
@@ -197,6 +248,7 @@ function init() {
 
     frameBust();
     pivot.add(model);
+    measureReach();
     loaded = true;
     resize();
     renderer.render(scene, camera);
