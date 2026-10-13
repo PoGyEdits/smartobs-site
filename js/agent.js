@@ -89,6 +89,7 @@ function init() {
   let currentYaw = 0;
   let loaded = false;
   let focusY = 0;
+  let crownY = 0;       // top of the head, for keeping it just under the nav bar
   let heightDist = 4;   // camera distance that frames the bust vertically
   let reach = null;
   let centreNdc = 0;    // where the panel's centre sits across the stage, -1..1
@@ -106,6 +107,7 @@ function init() {
     const b = new THREE.Box3().setFromObject(model);
     const h = b.max.y - b.min.y;
 
+    crownY = b.max.y;
     const top = b.max.y + h * FRAME.topPad;
     const bottom = b.max.y - h * FRAME.showFrac;
     const span = top - bottom;
@@ -158,6 +160,8 @@ function init() {
   // the stock then swings out under the copy instead of shrinking him.
   const SHIFT_RIGHT = 0.06;
   const SHIFT_PREFER = 0;
+  // Where the top of his head sits, in -1..1 screen height (1 = top edge).
+  const CROWN_AT = 0.78;
 
   function measureReach() {
     const pts = [];
@@ -216,6 +220,12 @@ function init() {
     shiftByYaw = yaws.map((y, i) => [y, slides[i]]).sort((p, q) => p[0] - q[0]);
     lastFit = { dist, heightDist, shiftByYaw };
     camera.position.z = dist;
+    // Backing off for the rifle would otherwise leave a gap above his head:
+    // keep the crown at the same height on screen, just under the nav bar.
+    const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const camY = crownY - CROWN_AT * dist * tanV;
+    camera.position.y = camY;
+    camera.lookAt(0, camY, 0);
     applyShift(shiftAt(currentYaw));
   }
 
