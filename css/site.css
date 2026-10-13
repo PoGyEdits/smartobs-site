@@ -566,12 +566,12 @@ img, video { max-width: 100%; display: block; }
 .foot-note { color: var(--muted); font-size: .84rem; margin: 0; line-height: 1.7; }
 
 /* ============================================================
-   Agent, fixed 3D panel
+   Weapon, fixed 3D panel
    ============================================================ */
 
 .agent {
   position: fixed;
-  right: 0;
+  right: 2vw;
   top: 0; height: 100svh;
   width: var(--agent-w);
   z-index: 40;
@@ -582,24 +582,21 @@ img, video { max-width: 100%; display: block; }
 }
 .agent.ready { opacity: 1; }
 
-/* Full height of the viewport: the figure reads as standing in the page
-   rather than sitting in a little card. Exactly 100svh, not less: any
-   shortfall shows as dead space under the figure, since the bust crop is
-   meant to run off the bottom edge. */
-/* The stage reaches past the panel's left edge by --agent-bleed, so the rifle
-   stock can swing out over the gutter instead of being cut off at the panel
-   edge. agent.js keeps the figure centred on the panel itself. */
-.agent { --agent-bleed: 40vw; }
-/* The stage reaches under the copy, so the copy sits above the figure, the
-   way a game menu puts its UI over the character. */
+/* A restrained glow anchors the floating rifle to the page's red accent.
+   Keep the entire stage inside its reserved column, clear of the copy. */
+.agent::before {
+  content: "";
+  position: absolute;
+  inset: 28% 0;
+  background: radial-gradient(ellipse, rgba(210, 12, 22, .11), transparent 68%);
+}
 @media (min-width: 1181px) {
   .hero-inner, .wrap { position: relative; z-index: 45; }
 }
-.agent-stage { position: relative; width: calc(100% + var(--agent-bleed)); margin-left: calc(-1 * var(--agent-bleed)); flex: none; height: 100svh; }
+.agent-stage { position: relative; width: 100%; flex: none; height: 100svh; }
 .agent-stage canvas { width: 100% !important; height: 100% !important; display: block; }
 
-/* The agent needs real estate. Below this it would sit on top of the
-   copy, so it is removed entirely rather than shrunk into noise. */
+/* Reserve the weapon's column only on desktop. */
 @media (max-width: 1180px) {
   .agent { display: none; }
 }
