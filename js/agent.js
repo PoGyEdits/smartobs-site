@@ -126,6 +126,9 @@ function init() {
     const stage = root.querySelector('.agent-stage').getBoundingClientRect();
     const w = Math.max(1, Math.round(stage.width));
     const h = Math.max(1, Math.round(stage.height));
+    // Browser zoom changes devicePixelRatio and fires resize, so re-read it
+    // here; otherwise zooming in leaves the figure rendered blurry.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     // The stage is wider than the panel (it bleeds left over the gutter).
@@ -148,9 +151,9 @@ function init() {
   // Share of the half-width the figure may use; the rest is breathing room
   // for the idle sway.
   const WIDTH_FILL = 0.94;
-  // How far (in stage widths, -1..1 space) he may slide left of the panel
-  // centre to fit the rifle. Further would put him over the page copy.
-  const SHIFT_MAX = 0.4;
+  // How far (in stage widths, -1..1 space) he may slide either way off the
+  // panel centre to fit the rifle. Kept small so he stays put on the right.
+  const SHIFT_MAX = 0.06;
 
   function measureReach() {
     const pts = [];
@@ -196,7 +199,7 @@ function init() {
           if (n < lo) lo = n;
           if (n > hi) hi = n;
         }
-        const sh = Math.min(centreNdc, Math.max(centreNdc - SHIFT_MAX, -(hi + lo) / 2));
+        const sh = Math.min(centreNdc + SHIFT_MAX, Math.max(centreNdc - SHIFT_MAX, -(hi + lo) / 2));
         if (lo + sh < -WIDTH_FILL || hi + sh > WIDTH_FILL) ok = false;
         return sh;
       });
