@@ -9,40 +9,16 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const MODEL = 'assets/model/agent.glb';
 
-// Framing. The model ships in a wide A-pose standing at full height; on the
-// page we want a bust: head and torso filling the panel, legs out of shot.
+// Extra turn so the exported model faces the viewer at yaw 0 (radians).
+const MODEL_YAW = -Math.PI / 2 + 0.75;
+
+// Framing. The model stands at full height; on the page we want a bust: head and torso filling the panel, legs out of shot.
 // showFrac is how much of the figure's total height stays visible, measured
 // down from the crown.
 const FRAME = {
   showFrac: 0.56,   // crown down past the belt, so the hands stay in frame
   topPad: 0.10,     // headroom above the crown, keeping it clear of the nav bar
   lift: 0.02        // nudge the framing down so the head is not dead centre
-};
-
-// Pose, in radians, applied to named bones after load. The GLB carries a
-// skeleton but no animation clips, so the resting A-pose is whatever the
-// exporter left. These bring the arms down and in, put a bend in the elbows
-// and add a little asymmetry so the figure reads as a person rather than a
-// mannequin.
-// Note both arms take the SAME values. The left and right bones are not
-// mirrored in this rig: probing them showed an identical local axis pair, so
-// opposite signs swing one arm down and the other straight out.
-// z swings the arm forward, which is what lifts the hands clear of the hips
-// and into shot: without it they hide behind the body and read as missing.
-const ARM_UPPER = { y: -0.60, x: 0.10, z: 0.30 };
-const ARM_LOWER = { y: -0.80 };
-
-const POSE = {
-  'arm_upper_l_014': ARM_UPPER,
-  'arm_upper_r_044': ARM_UPPER,
-  'arm_lower_l_015': ARM_LOWER,
-  'arm_lower_r_045': ARM_LOWER,
-  // A little counter-twist through the spine and head, so the figure is not
-  // perfectly square to the camera.
-  'spine_2_05':      { y:  0.05, x: 0.02 },
-  'spine_3_06':      { y:  0.04 },
-  'neck_0_07':       { y: -0.05 },
-  'head_0_08':       { y: -0.09, x: -0.03 }
 };
 
 const root = document.getElementById('agent');
@@ -108,17 +84,16 @@ function init() {
   scene.add(pivot);
 
   let model = null;
+  let mixer = null;
   let targetYaw = 0;
   let currentYaw = 0;
   let loaded = false;
   let focusY = 0;
-  const posed = [];
-  const eyes = [];
 
   /* ---------- framing ----------
      Aim the camera at the upper body instead of the whole figure, so the
      panel holds a bust. Everything is derived from the posed bounding box,
-     so changing FRAME or the pose does not need the numbers re-tuned. */
+     so changing FRAME or the animation does not need the numbers re-tuned. */
 
   function frameBust() {
     model.updateMatrixWorld(true);
@@ -135,78 +110,6 @@ function init() {
     camera.position.set(0, focusY, span / (2 * Math.tan(vFov / 2)));
     camera.lookAt(0, focusY, 0);
     camera.updateProjectionMatrix();
-  }
-
-
-
-  // How the ball sits in the socket, in multiples of its own radius. The
-  // eyeball bones sit a little high and proud of this balaclava, so the ball
-  // needs pushing back into the head and down behind the eye hole.
-  const EYE_SET = { back: 0.20, down: 0.00 };
-
-  function placeEye(eye) {
-    const r = eye.userData.local;
-    eye.position.set(0, 0, 0);
-    eye.quaternion.copy(eye.userData.aim);
-    eye.translateZ(-r * EYE_SET.back);
-    eye.translateY(-r * EYE_SET.down);
-  }
-
-  /* ---------- eyes ----------
-     The Sketchfab model has no face geometry at all: its five meshes are arms,
-     balaclava, body, legs and gloves. Through the balaclava's eye holes you see
-     straight into an empty head, which reads as eerie rather than masked.
-     The rig does carry eyeball_l / eyeball_r / eye_target bones though, so the
-     sockets can be filled at exactly the right place without touching the asset.
-     Sizes derive from the measured body height, so they survive a rescale. */
-
-  function addEyes() {
-    const L = model.getObjectByName('eyeball_l_09');
-    const R = model.getObjectByName('eyeball_r_010');
-    if (!L || !R) { console.warn('[agent] no eyeball bones'); return false; }
-
-    model.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(model);
-    const bodyH = box.max.y - box.min.y;
-    const rWorld = bodyH * 0.0082;         // small: they read as eyes in shadow, not marbles
-
-    const geo = new THREE.SphereGeometry(1, 24, 18);
-    const sclera = new THREE.MeshStandardMaterial({ color: 0x8d857c, roughness: 0.42, metalness: 0 });
-    const iris   = new THREE.MeshStandardMaterial({ color: 0x1c120b, roughness: 0.18, metalness: 0 });
-
-    // eye_target sits above the head, so aiming at it rolls the eyes upward.
-    // Point them along the model's own forward axis instead. At this moment the
-    // model is not yet parented to the pivot, so its world +Z is model forward.
-    const fwd = new THREE.Vector3(0, 0, 1)
-      .applyQuaternion(model.getWorldQuaternion(new THREE.Quaternion()))
-      .normalize();
-
-    const scale = new THREE.Vector3();
-    for (const bone of [L, R]) {
-      bone.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
-      const local = rWorld / Math.max(scale.x, 1e-6);   // undo the bone's world scale
-
-      const eye = new THREE.Group();
-      const ball = new THREE.Mesh(geo, sclera);
-      ball.scale.setScalar(local);
-      eye.add(ball);
-
-      const pupil = new THREE.Mesh(geo, iris);
-      pupil.scale.setScalar(local * 0.62);
-      pupil.position.z = local * 0.60;
-      eye.add(pupil);
-
-      eye.renderOrder = 1;
-      bone.add(eye);
-      model.updateMatrixWorld(true);
-      const here = bone.getWorldPosition(new THREE.Vector3());
-      eye.lookAt(here.add(fwd.clone().multiplyScalar(bodyH)));
-      eye.userData.local = local;
-      eye.userData.aim = eye.quaternion.clone();
-      placeEye(eye);
-      eyes.push(eye);
-    }
-    return true;
   }
 
   /* ---------- size ---------- */
@@ -259,19 +162,39 @@ function init() {
       }
     });
 
-    // Pose the skeleton. Bones are ordinary Object3Ds, so rotating them and
-    // letting three.js rebuild the skinning matrices is all that is needed.
-    for (const [name, r] of Object.entries(POSE)) {
-      const bone = model.getObjectByName(name);
-      if (!bone) { console.warn('[agent] no bone', name); continue; }
-      bone.rotation.x += r.x || 0;
-      bone.rotation.y += r.y || 0;
-      bone.rotation.z += r.z || 0;
-      posed.push(name);
+    // The idle comes from CS2 itself: the T rifle idle the agents play in the
+    // game's main menu, with the AK-47 riding in his hands. It loops forever;
+    // the section turning below is applied on top, to the pivot.
+    if (gltf.animations && gltf.animations.length) {
+      mixer = new THREE.AnimationMixer(model);
+      const action = mixer.clipAction(gltf.animations[0]);
+      action.setLoop(THREE.LoopRepeat, Infinity);
+      action.play();
+      mixer.update(0);
     }
     model.updateMatrixWorld(true);
 
-    addEyes();
+    // The CS2 export faces a different way from the old model; turn it so
+    // yaw 0 looks straight out of the page.
+    model.rotation.y += MODEL_YAW;
+    model.updateMatrixWorld(true);
+
+    // Centre again on the posed figure. The first centring measured the bind
+    // pose, and the idle stands him somewhere else, so without this he drifts
+    // off the side of the panel. Height comes from the whole figure, but the
+    // sideways centre from the body alone: the rifle sticks out to one side
+    // and would otherwise push him off centre.
+    {
+      const posedBox = new THREE.Box3().setFromObject(model);
+      const bodyBox = new THREE.Box3();
+      model.traverse((o) => { if (o.isMesh && !/ak47/i.test(o.name)) bodyBox.expandByObject(o); });
+      const c = (bodyBox.isEmpty() ? posedBox : bodyBox).getCenter(new THREE.Vector3());
+      model.position.x -= c.x;
+      model.position.z -= c.z;
+      model.position.y -= posedBox.getCenter(new THREE.Vector3()).y;
+      model.updateMatrixWorld(true);
+    }
+
     frameBust();
     pivot.add(model);
     loaded = true;
@@ -310,6 +233,7 @@ function init() {
 
   function frame() {
     const dt = Math.min(clock.getDelta(), 0.1);
+    if (mixer && !reduced) mixer.update(dt);
 
     // Ease toward the target angle. Framerate-independent so a slow frame
     // does not overshoot.
@@ -344,14 +268,8 @@ function init() {
     render: () => renderer.render(scene, camera),
     // Live handles, for posing experiments in the console.
     model: () => model,
+    mixer: () => mixer,
     reframe: () => { frameBust(); renderer.render(scene, camera); },
-    posedBones: () => posed.slice(),
-    eyeCount: () => eyes.length,
-    tuneEyes: (back, down) => {
-      EYE_SET.back = back; EYE_SET.down = down;
-      eyes.forEach(placeEye);
-      renderer.render(scene, camera);
-    },
     snapshot: () => { renderer.render(scene, camera); return canvas.toDataURL('image/png'); },
     // snap=true jumps straight to the angle and draws it, without waiting for
     // the easing loop, used to inspect a pose in environments where
