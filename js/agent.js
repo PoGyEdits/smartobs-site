@@ -16,7 +16,7 @@ const MODEL_YAW = -Math.PI / 2 + 0.75;
 // showFrac is how much of the figure's total height stays visible, measured
 // down from the crown.
 const FRAME = {
-  showFrac: 0.56,   // crown down past the belt, so the hands stay in frame
+  showFrac: 0.46,   // crown down past the belt, so the hands stay in frame
   topPad: 0.10,     // headroom above the crown, keeping it clear of the nav bar
   lift: 0.02        // nudge the framing down so the head is not dead centre
 };
@@ -90,7 +90,11 @@ function init() {
   let loaded = false;
   let focusY = 0;
   let heightDist = 4;   // camera distance that frames the bust vertically
-  let reach = null;     // sampled points of the figure, [x, z] pairs, for the width fit
+  let reach = null;
+  let centreNdc = 0;    // where the panel's centre sits across the stage, -1..1
+  let stageW = 1, stageH = 1;
+  let lastFit = null;
+  let shiftByYaw = [];     // sampled points of the figure, [x, z] pairs, for the width fit
 
   /* ---------- framing ----------
      Aim the camera at the upper body instead of the whole figure, so the
@@ -124,6 +128,11 @@ function init() {
     const h = Math.max(1, Math.round(stage.height));
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
+    // The stage is wider than the panel (it bleeds left over the gutter).
+    // Shift the view so the figure still stands centred on the panel.
+    const bleed = Math.max(0, w - r.width);
+    stageW = w; stageH = h;
+    centreNdc = bleed / w;
     fitWidth();
     camera.updateProjectionMatrix();
     return r;
@@ -131,14 +140,17 @@ function init() {
 
   /* ---------- width fit ----------
      The rifle reaches well past the shoulders, and at some section angles
-     the stock or the muzzle ran off the edge of the panel and was cut. Pull
-     the camera back far enough that the whole figure, rifle included, stays
-     inside the panel at every section angle. Measured once from the actual
+     the stock or the muzzle ran off the edge of the stage and was cut. The
+     stage bleeds left for the stock; if anything still would not fit at
+     some section angle, pull the camera back just enough that it does. Measured once from the actual
      skinned vertices, so it follows the pose, not a loose bounding box. */
 
   // Share of the half-width the figure may use; the rest is breathing room
   // for the idle sway.
-  const WIDTH_FILL = 0.92;
+  const WIDTH_FILL = 0.94;
+  // How far (in stage widths, -1..1 space) he may slide left of the panel
+  // centre to fit the rifle. Further would put him over the page copy.
+  const SHIFT_MAX = 0.4;
 
   function measureReach() {
     const pts = [];
@@ -159,21 +171,59 @@ function init() {
   }
 
   function fitWidth() {
-    if (!reach) return;
-    const t = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect * WIDTH_FILL;
+    if (!reach) { applyShift(centreNdc); return; }
+    const t = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect;
     const yaws = sections.map((s) => parseFloat(s.dataset.agentYaw) || 0);
-    let need = heightDist;
-    for (const yaw of yaws) {
-      const c = Math.cos(yaw), sn = Math.sin(yaw);
+    const rots = yaws.map((yaw) => {
+      const c = Math.cos(yaw), sn = Math.sin(yaw), r = [];
       for (let i = 0; i < reach.length; i += 2) {
         const x = reach[i], z = reach[i + 1];
-        const xr = x * c + z * sn;
-        const zr = -x * sn + z * c;
-        const d = Math.abs(xr) / t + zr;
-        if (d > need) need = d;
+        r.push(x * c + z * sn, -x * sn + z * c);
+      }
+      return r;
+    });
+    // Try the bust distance first and back off in small steps until the
+    // figure fits at every section angle. Each angle gets its own sideways
+    // slide (eased with the turn in frame()), since the rifle sticks out to
+    // a different side depending on which way he faces.
+    let dist = heightDist, slides = [];
+    for (let step = 0; step < 80; step++) {
+      let ok = true;
+      slides = rots.map((r) => {
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < r.length; i += 2) {
+          const n = r[i] / ((dist - r[i + 1]) * t);
+          if (n < lo) lo = n;
+          if (n > hi) hi = n;
+        }
+        const sh = Math.min(centreNdc, Math.max(centreNdc - SHIFT_MAX, -(hi + lo) / 2));
+        if (lo + sh < -WIDTH_FILL || hi + sh > WIDTH_FILL) ok = false;
+        return sh;
+      });
+      if (ok) break;
+      dist *= 1.01;
+    }
+    shiftByYaw = yaws.map((y, i) => [y, slides[i]]).sort((p, q) => p[0] - q[0]);
+    lastFit = { dist, heightDist, shiftByYaw };
+    camera.position.z = dist;
+    applyShift(shiftAt(currentYaw));
+  }
+
+  function shiftAt(yaw) {
+    const tbl = shiftByYaw;
+    if (!tbl.length) return centreNdc;
+    if (yaw <= tbl[0][0]) return tbl[0][1];
+    for (let i = 1; i < tbl.length; i++) {
+      if (yaw <= tbl[i][0]) {
+        const [y0, s0] = tbl[i - 1], [y1, s1] = tbl[i];
+        return s0 + (s1 - s0) * ((yaw - y0) / (y1 - y0 || 1));
       }
     }
-    camera.position.z = need;
+    return tbl[tbl.length - 1][1];
+  }
+
+  function applyShift(sh) {
+    camera.setViewOffset(stageW, stageH, -sh * stageW / 2, 0, stageW, stageH);
   }
 
   /* ---------- load ---------- */
@@ -294,6 +344,7 @@ function init() {
 
     if (model) {
       pivot.rotation.y = currentYaw;
+      if (shiftByYaw.length) applyShift(shiftAt(currentYaw));
       // A slow idle drift, so the figure never looks frozen between sections.
       // Kept small: at bust framing the view is only ~1.3 units tall, so what
       // read as a gentle float on the full figure would be a bob here.
@@ -321,6 +372,7 @@ function init() {
     // Live handles, for posing experiments in the console.
     model: () => model,
     mixer: () => mixer,
+    fit: () => lastFit,
     reframe: () => { frameBust(); renderer.render(scene, camera); },
     snapshot: () => { renderer.render(scene, camera); return canvas.toDataURL('image/png'); },
     // snap=true jumps straight to the angle and draws it, without waiting for
@@ -331,6 +383,7 @@ function init() {
       if (snap) {
         currentYaw = y;
         pivot.rotation.y = y;
+        if (shiftByYaw.length) applyShift(shiftAt(y));
         renderer.render(scene, camera);
       }
     },
