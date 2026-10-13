@@ -21,6 +21,22 @@ const FRAME = {
   lift: 0.02        // nudge the framing down so the head is not dead centre
 };
 
+/* ---------- eyes ----------
+   CS2 draws the eyeballs with its own shader, which the glTF export loses, so
+   the whites are baked into the mask texture and the irises are drawn here, on
+   top, in the eye area given by eyemask.png. Drawing them live is what lets
+   them glance around, blink, and keep finding the viewer as he turns away.
+   The numbers come from the Blender scene: for each eye, the texture spot at
+   its centre and how texture space maps to metres across (x) and up (y). */
+const EYES = {
+  box: new THREE.Vector4(0.583984, 0.652344, 0.244141, 0.188477),
+  eyes: [{ c: new THREE.Vector2(0.671092, 0.797346), a: new THREE.Vector4(0.158598, 0.009269, 0.002100, 0.149527) }, { c: new THREE.Vector2(0.742154, 0.691945), a: new THREE.Vector4(0.159647, -0.009104, -0.001705, 0.151008) }],
+  halfHeight: 0.005674,    // half the height of the eye opening, metres
+  irisR: 0.0050,     // iris radius, metres
+  glance: [0.0014, 0.0006],   // how far a glance moves the iris, metres
+  follow: 0.004,     // iris shift per radian he has turned away from the start
+};
+
 const root = document.getElementById('agent');
 const canvas = document.getElementById('agent-canvas');
 
@@ -246,6 +262,90 @@ function init() {
     camera.setViewOffset(stageW, stageH, -sh * stageW / 2, 0, stageW, stageH);
   }
 
+  const eyeU = {
+    eyeMask: { value: null },
+    eyeBox: { value: EYES.box },
+    eyeC0: { value: EYES.eyes[0].c }, eyeA0: { value: EYES.eyes[0].a },
+    eyeC1: { value: EYES.eyes[1].c }, eyeA1: { value: EYES.eyes[1].a },
+    eyeGaze: { value: new THREE.Vector2() },
+    eyeBlink: { value: 0 },
+    eyeHz: { value: EYES.halfHeight },
+    irisR: { value: EYES.irisR }
+  };
+  new THREE.TextureLoader().load('assets/model/eyemask.png', (t) => { eyeU.eyeMask.value = t; });
+
+  function addEyes(mat) {
+    mat.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, eyeU);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>
+uniform sampler2D eyeMask; uniform vec4 eyeBox;
+uniform vec2 eyeC0; uniform vec4 eyeA0; uniform vec2 eyeC1; uniform vec4 eyeA1;
+uniform vec2 eyeGaze; uniform float eyeBlink; uniform float eyeHz; uniform float irisR;
+vec2 eyeLocal(vec2 uv, vec2 c, vec4 a) { vec2 q = uv - c; return vec2(a.x * q.x + a.y * q.y, a.z * q.x + a.w * q.y); }`)
+        .replace('#include <map_fragment>', `#include <map_fragment>
+{
+  vec2 uvb = vec2(vMapUv.x, 1.0 - vMapUv.y);
+  vec2 mUV = (uvb - eyeBox.xy) / eyeBox.zw;
+  if (mUV.x >= 0.0 && mUV.y >= 0.0 && mUV.x <= 1.0 && mUV.y <= 1.0) {
+    float m = texture2D(eyeMask, mUV).r;
+    if (m > 0.01) {
+      vec2 d0 = eyeLocal(uvb, eyeC0, eyeA0);
+      vec2 d1 = eyeLocal(uvb, eyeC1, eyeA1);
+      vec2 d = dot(d0, d0) < dot(d1, d1) ? d0 : d1;
+      vec2 p = d - eyeGaze;
+      float r = length(p) / irisR;
+      // grey-blue iris, darker toward its rim, black pupil
+      vec3 iris = vec3(0.075, 0.115, 0.15) * (1.0 + 0.35 * smoothstep(0.75, 0.3, r));
+      iris *= 1.0 - 0.6 * smoothstep(0.7, 1.0, r);
+      iris = mix(iris, vec3(0.008), smoothstep(0.40, 0.34, r));
+      // the baked whites read glaring under the page lights: warm them and pull them down
+      vec3 white = diffuseColor.rgb * vec3(0.72, 0.66, 0.60);
+      vec3 c = mix(white, iris, smoothstep(1.0, 0.92, r));
+      // a soft reflection of the key light, fixed in the eye
+      vec2 hp = d - vec2(-0.35, 0.35) * irisR;
+      c = mix(c, vec3(0.55), 0.8 * smoothstep(0.0011, 0.0005, length(hp)) * step(r, 1.0));
+      // upper lid shadow, and the lid itself coming down when he blinks
+      c *= 1.0 - 0.35 * smoothstep(-0.2, 1.0, d.y / eyeHz);
+      float lid = eyeHz * (1.15 - 2.3 * eyeBlink);
+      c = mix(c, vec3(0.20, 0.11, 0.07), smoothstep(lid - 0.0005, lid + 0.0005, d.y));
+      diffuseColor.rgb = mix(diffuseColor.rgb, c, m);
+    }
+  }
+}`);
+    };
+    mat.needsUpdate = true;
+  }
+
+  // Glances: hold a spot for a second or few, then flick to a new one.
+  const gazeNow = new THREE.Vector2(), gazeTo = new THREE.Vector2();
+  let glanceIn = 1.5, blinkIn = 2.5, blinkT = -1;
+  let startYaw = null;
+  function animateEyes(dt) {
+    if (startYaw === null && sections.length) startYaw = parseFloat(sections[0].dataset.agentYaw) || 0;
+    if (!reduced) {
+      glanceIn -= dt;
+      if (glanceIn <= 0) {
+        // mostly back near the middle, now and then a little further off
+        const far = Math.random() < 0.35 ? 1 : 0.4;
+        gazeTo.set((Math.random() * 2 - 1) * EYES.glance[0] * far, (Math.random() * 2 - 1) * EYES.glance[1] * far);
+        glanceIn = 1.2 + Math.random() * 2.8;
+      }
+      blinkIn -= dt;
+      if (blinkIn <= 0 && blinkT < 0) { blinkT = 0; blinkIn = 2.5 + Math.random() * 4; }
+    }
+    gazeNow.lerp(gazeTo, 1 - Math.pow(0.0005, dt));
+    // As he turns away from the start, his eyes keep coming back to you.
+    const follow = THREE.MathUtils.clamp((currentYaw - (startYaw || 0)) * EYES.follow, -0.0024, 0.0024);
+    eyeU.eyeGaze.value.set(gazeNow.x + follow, gazeNow.y);
+    if (blinkT >= 0) {
+      blinkT += dt;
+      const k = blinkT / 0.16;
+      eyeU.eyeBlink.value = k >= 1 ? 0 : Math.sin(Math.PI * k);
+      if (k >= 1) blinkT = -1;
+    }
+  }
+
   /* ---------- load ---------- */
 
   new GLTFLoader().load(MODEL, (gltf) => {
@@ -280,6 +380,7 @@ function init() {
       if (o.isMesh || o.isSkinnedMesh) {
         o.frustumCulled = false;
         if (o.material) o.material.envMapIntensity = 0.8;
+        if (o.material && /balaclava/i.test(o.material.name)) addEyes(o.material);
       }
     });
 
@@ -356,6 +457,7 @@ function init() {
   function frame() {
     const dt = Math.min(clock.getDelta(), 0.1);
     if (mixer && !reduced) mixer.update(dt);
+    animateEyes(dt);
 
     // Ease toward the target angle. Framerate-independent so a slow frame
     // does not overshoot.
