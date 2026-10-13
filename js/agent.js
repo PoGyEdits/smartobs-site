@@ -16,7 +16,7 @@ const MODEL_YAW = -Math.PI / 2 + 0.75;
 // showFrac is how much of the figure's total height stays visible, measured
 // down from the crown.
 const FRAME = {
-  showFrac: 0.46,   // crown down past the belt, so the hands stay in frame
+  showFrac: 0.30,   // crown down past the belt, so the hands stay in frame
   topPad: 0.10,     // headroom above the crown, keeping it clear of the nav bar
   lift: 0.02        // nudge the framing down so the head is not dead centre
 };
@@ -150,10 +150,14 @@ function init() {
 
   // Share of the half-width the figure may use; the rest is breathing room
   // for the idle sway.
-  const WIDTH_FILL = 0.94;
+  const WIDTH_FILL = 0.9;
   // How far (in stage widths, -1..1 space) he may slide either way off the
   // panel centre to fit the rifle. Kept small so he stays put on the right.
   const SHIFT_MAX = 0.06;
+  // He may sit a little further right of the panel centre than left of it:
+  // the stock then swings out under the copy instead of shrinking him.
+  const SHIFT_RIGHT = 0.06;
+  const SHIFT_PREFER = 0;
 
   function measureReach() {
     const pts = [];
@@ -199,9 +203,12 @@ function init() {
           if (n < lo) lo = n;
           if (n > hi) hi = n;
         }
-        const sh = Math.min(centreNdc + SHIFT_MAX, Math.max(centreNdc - SHIFT_MAX, -(hi + lo) / 2));
-        if (lo + sh < -WIDTH_FILL || hi + sh > WIDTH_FILL) ok = false;
-        return sh;
+        // Any slide in [from, to] keeps both ends of the rifle on the stage;
+        // take the one nearest the preferred spot, just right of the panel centre.
+        const from = Math.max(-WIDTH_FILL - lo, centreNdc - SHIFT_MAX);
+        const to = Math.min(WIDTH_FILL - hi, centreNdc + SHIFT_RIGHT);
+        if (from > to) { ok = false; return centreNdc; }
+        return Math.min(to, Math.max(from, centreNdc + SHIFT_PREFER));
       });
       if (ok) break;
       dist *= 1.01;

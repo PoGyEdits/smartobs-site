@@ -589,7 +589,12 @@ img, video { max-width: 100%; display: block; }
 /* The stage reaches past the panel's left edge by --agent-bleed, so the rifle
    stock can swing out over the gutter instead of being cut off at the panel
    edge. agent.js keeps the figure centred on the panel itself. */
-.agent { --agent-bleed: 13vw; }
+.agent { --agent-bleed: 40vw; }
+/* The stage reaches under the copy, so the copy sits above the figure, the
+   way a game menu puts its UI over the character. */
+@media (min-width: 1181px) {
+  .hero-inner, .wrap { position: relative; z-index: 45; }
+}
 .agent-stage { position: relative; width: calc(100% + var(--agent-bleed)); margin-left: calc(-1 * var(--agent-bleed)); flex: none; height: 100svh; }
 .agent-stage canvas { width: 100% !important; height: 100% !important; display: block; }
 
